@@ -1,0 +1,11 @@
+[Unit]
+Description=ICAP DRBL client service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/etc/drbl-icap-client-service.env
+ExecStart=/opt/bin/drbl-icap-client-service_linux_amd64 -icap_port=$LISTEN -peers-filename=$PEERSFILE -debug=$DEBUG -blockpage=$BLOCKPAGE
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
