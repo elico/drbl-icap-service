@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/elico/drbl-peer"
 	"github.com/elico/icap"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,6 +36,9 @@ var defaultAction string
 var dbBaseUrl string
 var bypassConnect bool
 var icap_maxconn string
+var logblocks bool
+var bypassblocks bool
+var logblocksFile string
 
 var blockWeight int
 var timeout int
@@ -52,7 +56,15 @@ func ProcessRequest(host string) (string, int64) {
 	}
 	block, weight := drblPeers.Check(host)
 	if block {
-		answer = "BLOCK"
+		if !bypassblocks {
+			answer = "BLOCK"
+		}
+		if debug {
+			fmt.Println(host, "Weight is:", weight)
+		}
+		if logblocks {
+			log.Println(host, " Weight is: ", weight)
+		}
 	}
 	return answer, weight
 }
@@ -254,7 +266,10 @@ func init() {
 	flag.StringVar(&defaultAction, "default-action", "ALLOW", "Answer can be either \"ALLOW\" or \"BLOCK\"")
 	flag.StringVar(&icap_maxconn, "icap-maxconn", "4000", "Maximum number of connections that the icap should handle")
 	flag.BoolVar(&bypassConnect, "bypassconnect", false, "Bypass CONNECT requests modification. set \"1\" to enable")
+	flag.BoolVar(&logblocks, "logblocks", false, "Log blacklisted domains into a log file. set \"1\" to enable")
+	flag.StringVar(&logblocksFile, "logblocks-filename", "block-log.txt", "Blacklisted hosts log filename")
 
+	flag.BoolVar(&bypassblocks, "bypassblocks", false, "Bypass actual blcoking to gather hosts for blacklist population using the log files. set \"1\" to enable")
 	flag.IntVar(&blockWeight, "block-weight", 128, "Peers blacklist weight")
 	flag.IntVar(&timeout, "query-timeout", 30, "Timeout for all peers response")
 	flag.StringVar(&peersFileName, "peers-filename", "peersfile.txt", "Blacklists peers filename")
@@ -283,6 +298,14 @@ func init() {
 }
 
 func main() {
+	f, err := os.OpenFile(logblocksFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+	fmt.Printf("error opening file: %v\n", err)
+	}
+	defer f.Close()
+	log.SetOutput(f)
+	log.Println("##This is a test log entry")
+
 	fmt.Fprintln(os.Stderr, "Starting DRBL ICAP serivce :D")
 
 	// Verify flags input

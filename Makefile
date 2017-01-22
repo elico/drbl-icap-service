@@ -8,6 +8,7 @@ clean:
 	echo "cleaning"
 	rm ./bin/*
 	rmdir ./bin
+	rm drbl-icap-client-service.tar.xz
 linux:	
 	./build.sh "linux" "amd64"
 	./build.sh "linux" "386"

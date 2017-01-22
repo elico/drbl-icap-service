@@ -7,7 +7,7 @@ Links for public DNS blacklists services
 -----
  - [Norton dns blacklists information](https://dns.norton.com/faq.html)
  - [OpenDNS Home Internet Security](https://www.opendns.com/home-internet-security/)
-
+ - [Yandex.DNS Secure home internet](https://dns.yandex.com/advanced/)
 Example for squid icap service settings(when the service is installed on the squid machine)
 -----
 ```
