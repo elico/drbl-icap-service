@@ -28,7 +28,7 @@ import (
 	"strings"
 )
 
-var ISTag = "\"DRBL\""
+var icapIstag string
 var debug bool
 var address string
 var block_page string
@@ -36,9 +36,9 @@ var defaultAction string
 var dbBaseUrl string
 var bypassConnect bool
 var icap_maxconn string
-var logblocks bool
-var bypassblocks bool
-var logblocksFile string
+var logHits bool
+var bypassBlocks bool
+var logHitFile string
 
 var blockWeight int
 var timeout int
@@ -54,15 +54,19 @@ func ProcessRequest(host string) (string, int64) {
 	if debug {
 		fmt.Fprintln(os.Stderr, "ERRlog: Proccessing host => \""+host+"\"")
 	}
+
 	block, weight := drblPeers.Check(host)
 	if block {
-		if !bypassblocks {
-			answer = "BLOCK"
+		answer = "BLOCK"
+		if bypassBlocks {
+			answer = "ALLOW bypassed=1"
+		} else {
+			answer = "BLOCK" + " hit=1 bypassed=1"
 		}
 		if debug {
 			fmt.Println(host, "Weight is:", weight)
 		}
-		if logblocks {
+		if logHits {
 			log.Println(host, " Weight is: ", weight)
 		}
 	}
@@ -71,8 +75,8 @@ func ProcessRequest(host string) (string, int64) {
 
 func DrblCheck(w icap.ResponseWriter, req *icap.Request) {
 	h := w.Header()
-	h.Set("ISTag", ISTag)
-	h.Set("Service", "SquidBlocker filter ICAP service")
+	h.Set("ISTag", icapIstag)
+	h.Set("Service", "DRBL Client ICAP service")
 
 	if debug {
 		fmt.Fprintln(os.Stderr, "Printing the full ICAP request")
@@ -137,14 +141,14 @@ func DrblCheck(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		switch {
-		case answer == "ALLOW":
+		case strings.HasPrefix(answer, "ALLOW"):
 			if debug {
 				fmt.Fprintln(os.Stderr, "OK response and sending 204 back")
 			}
 			w.WriteHeader(204, nil, false)
 			return
 
-		case answer == "BLOCK":
+		case strings.HasPrefix(answer, "BLOCK"):
 			if debug {
 				fmt.Fprintln(os.Stderr, "ERR response from DB. Sending 307 redirection back")
 			}
@@ -214,7 +218,7 @@ func DrblCheck(w icap.ResponseWriter, req *icap.Request) {
 
 func defaultIcap(w icap.ResponseWriter, req *icap.Request) {
 	h := w.Header()
-	h.Set("ISTag", ISTag)
+	h.Set("ISTag", icapIstag)
 	h.Set("Service", "DRBL default ICAP service")
 
 	if debug {
@@ -261,15 +265,16 @@ func init() {
 	fmt.Fprintln(os.Stderr, "Starting DRBL ICAP service")
 
 	flag.BoolVar(&debug, "debug", false, "Run in debug mode")
-	flag.StringVar(&address, "icap-port", "127.0.0.1:1344", "Listening address for the ICAP service")
+	flag.StringVar(&address, "icap-port", "127.0.0.1:1344", "Listening address for the ICAP service(GoLang style :1344 to listen on all ports)")
 	flag.StringVar(&block_page, "blockpage", "http://ngtech.co.il/block_page/", "A url which will be used as a block page with the domains/host appended")
 	flag.StringVar(&defaultAction, "default-action", "ALLOW", "Answer can be either \"ALLOW\" or \"BLOCK\"")
 	flag.StringVar(&icap_maxconn, "icap-maxconn", "4000", "Maximum number of connections that the icap should handle")
 	flag.BoolVar(&bypassConnect, "bypassconnect", false, "Bypass CONNECT requests modification. set \"1\" to enable")
-	flag.BoolVar(&logblocks, "logblocks", false, "Log blacklisted domains into a log file. set \"1\" to enable")
-	flag.StringVar(&logblocksFile, "logblocks-filename", "block-log.txt", "Blacklisted hosts log filename")
+	flag.BoolVar(&logHits, "logHits", false, "Log blacklisted domains into a log file. set \"1\" to enable")
+	flag.StringVar(&logHitFile, "loghits-filename", "hits-log.txt", "Blacklisted hosts log filename")
+	flag.StringVar(&icapIstag, "icap-istag", "DRBL-ICAP-CLIENT V1.0.4", "Service version")
 
-	flag.BoolVar(&bypassblocks, "bypassblocks", false, "Bypass actual blcoking to gather hosts for blacklist population using the log files. set \"1\" to enable")
+	flag.BoolVar(&bypassBlocks, "bypassblocks", false, "Bypass actual blcoking to gather hosts for blacklist population using the log files. set \"1\" to enable")
 	flag.IntVar(&blockWeight, "block-weight", 128, "Peers blacklist weight")
 	flag.IntVar(&timeout, "query-timeout", 30, "Timeout for all peers response")
 	flag.StringVar(&peersFileName, "peers-filename", "peersfile.txt", "Blacklists peers filename")
@@ -298,9 +303,9 @@ func init() {
 }
 
 func main() {
-	f, err := os.OpenFile(logblocksFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(logHitFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-	fmt.Printf("error opening file: %v\n", err)
+		fmt.Printf("error opening file: %v\n", err)
 	}
 	defer f.Close()
 	log.SetOutput(f)
@@ -319,9 +324,7 @@ func main() {
 	}
 
 	drblPeers, _ = drblpeer.NewPeerListFromFile(peersFileName, int64(blockWeight), timeout, debug)
-	if debug {
-		fmt.Println("Peers", drblPeers)
-	}
+	fmt.Println("Peers", drblPeers)
 
 	icap.HandleFunc("/drbl", DrblCheck)
 	icap.HandleFunc("/", defaultIcap)
